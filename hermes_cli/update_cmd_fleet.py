@@ -330,6 +330,8 @@ def _update_owes_fleet_restart() -> bool:
     Same evidence as :func:`_pending_fleet_restart_needed`, except that a receipt whose
     restart phase completed is held to the code it pulled, not to today's checkout: the
     update kept its promise, and a checkout moved later by hand is not its unfinished work.
+    A fleet an operator has since restarted onto that moved checkout (``hermes gateway
+    restart`` — the remedy this warning names) has nothing of the update left to owe either.
     """
     with suppress(OSError):
         if _fleet_restart_pending_marker_path().is_file():
@@ -339,8 +341,8 @@ def _update_owes_fleet_restart() -> bool:
     from hermes_cli.update_cmd import _current_checkout_sha
     from hermes_cli.update_receipt import read_latest_receipt
     restarted_to = _receipt_restart_phase_completed(read_latest_receipt() or {})
-    if restarted_to:
-        return not _live_fleet_covers_receipt(restarted_to, accept_states=("current", "stale"))
+    if restarted_to and _live_fleet_covers_receipt(restarted_to, accept_states=("current", "stale")):
+        return False
     return not _live_fleet_covers_receipt(_current_checkout_sha())
 
 
