@@ -420,19 +420,25 @@ def _catalog_plugin_commands(cat: _Catalog) -> None:
         cat.commands[key] = {"argument_mode": mode, "desktop": None}
 
 
-def _catalog_skills(cat: _Catalog, skills: dict[str, dict]) -> None:
-    """Append skill pairs and fill ``skills`` = ``{key: {usage, origin}}`` (every consumer ranks by them)."""
+def _catalog_skills(cat: _Catalog, skills: dict[str, dict]) -> str:
+    """Append skill pairs and fill ``skills`` = ``{key: {usage, origin}}`` (every consumer ranks by them).
+    Returns the one-line notice for skills whose name is a built-in command (no ``/<name>`` entry;
+    ``agent.skill_commands`` guard), ``""`` when none."""
     usage, origin_of = _skill_usage_lookup()
-    for k, info in sorted(_tools_mod("agent.skill_commands").scan_skill_commands().items()):
+    sc = _tools_mod("agent.skill_commands")
+    for k, info in sorted(sc.scan_skill_commands().items()):
         cat.pairs.append([k, str(info.get("description", "Skill"))])
         name = str(info.get("name") or k.lstrip("/"))
         skills[k] = {"usage": usage(name), "origin": origin_of(name)}
+    names = sorted(s["name"] for s in _tools_mod("tools.skills_tool")._find_all_skills())
+    return "; ".join(filter(None, map(sc.skill_command_collision_note, names)))
 
 
 @_rpc("commands.catalog", 5020)
 def _(rid, params: dict) -> dict:
     """Registry-backed slash metadata, categorized, no aliases. Discovery failures land in ``warning``
-    (skills' message wins, then quick commands', then plugins')."""
+    (skills' message wins, then quick commands', then plugins'); with no failure it carries the
+    built-in-name collision notice for skills that have no ``/<name>`` (empty when none)."""
     cat = _Catalog()
     _catalog_registry(cat)
     warning = ""
@@ -446,7 +452,7 @@ def _(rid, params: dict) -> dict:
         warning = warning or f"plugin command discovery unavailable: {e}"
     skills: dict[str, dict] = {}
     try:
-        _catalog_skills(cat, skills)
+        warning = _catalog_skills(cat, skills) or warning
     except Exception as e:
         warning = f"skill discovery unavailable: {e}"
     return _ok(rid, {
