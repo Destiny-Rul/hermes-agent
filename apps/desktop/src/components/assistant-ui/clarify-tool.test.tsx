@@ -9,7 +9,7 @@ import { type SessionView, SessionViewProvider } from '@/app/chat/session-view'
 import { hiddenPaneProps } from '@/components/pane-shell/pane-visibility'
 import { $activeTreeGroup, $hoveredTreeGroup } from '@/components/pane-shell/tree/store'
 import { I18nProvider } from '@/i18n'
-import { clearClarifyRequest, setClarifyRequest } from '@/store/clarify'
+import { $clarifyRequest, clearClarifyRequest, setClarifyRequest } from '@/store/clarify'
 import { $gateway } from '@/store/gateway'
 import { $profiles } from '@/store/profile'
 import { hasOpenServerRequest, rememberServerRequest, resetServerRequestsForTests } from '@/store/server-requests'
@@ -166,6 +166,27 @@ describe('ClarifyTool live card stays mounted across settle', () => {
     rerender(clarifyTree(<ClarifyTool {...liveClarifyProps()} />))
 
     expect(document.querySelector('[data-clarify-choices]')).toBeTruthy()
+  })
+
+  it('keeps the request answerable when its live server receipt has expired', async () => {
+    $activeSessionId.set('session-1')
+    $gateway.set({ request: vi.fn() } as never)
+    setClarifyRequest({
+      choices: ['staging', 'production'],
+      multiSelect: false,
+      question: 'Which deployment target?',
+      requestId: 'missing-request',
+      sessionId: 'session-1'
+    })
+    renderClarify(<ClarifyTool {...liveClarifyProps()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /staging/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Continue/ }))
+
+    await waitFor(() => {
+      expect($clarifyRequest.get()?.requestId).toBe('missing-request')
+      expect(screen.getByRole('button', { name: /Continue/ }).hasAttribute('disabled')).toBe(false)
+    })
   })
 
   it('demotes when the turn is stopped after the card was live but never answered', () => {

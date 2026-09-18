@@ -482,8 +482,17 @@ function ClarifyToolSinglePending({
 
       try {
         // The response frame goes back over the socket the request arrived on —
-        // the owner backend by construction (#91684's class cannot recur).
-        respondToServerRequest(matchingRequest.requestId, { answer })
+        // the owner backend by construction (#91684's class cannot recur). A
+        // reconnect/cancel race can still retire that local receipt first; do
+        // not clear an answerable card or leave it spinning when nothing left
+        // the renderer.
+        if (!respondToServerRequest(matchingRequest.requestId, { answer })) {
+          notifyError(new Error(copy.gatewayDisconnected), copy.sendFailed, { action: reconnectAction() })
+          setSubmitting(false)
+
+          return
+        }
+
         triggerHaptic('submit')
         onAnswered()
         clearClarifyRequest(matchingRequest.requestId, matchingRequest.sessionId)
