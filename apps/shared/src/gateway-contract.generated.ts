@@ -1956,6 +1956,7 @@ export interface ProjectTreeNode {
   totalCostUsd?: number
   repos?: ProjectTreeRepo[]
   previewSessions?: ProjectTreeSession[]
+  sessionIds?: string[]
 }
 export interface ProjectTreeRepo {
   id: string
