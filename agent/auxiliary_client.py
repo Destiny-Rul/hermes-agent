@@ -1497,7 +1497,7 @@ class _CodexCompletionsAdapter:
             service_tier = extra_body.get("service_tier")
             if isinstance(service_tier, str) and service_tier.strip() and not is_xai:
                 resp_kwargs["service_tier"] = service_tier.strip()
-            from agent.auxiliary_codex_reasoning import _codex_aux_reasoning_kwargs
+            from agent.auxiliary_adapter_reasoning import _codex_aux_reasoning_kwargs
             resp_kwargs.update(_codex_aux_reasoning_kwargs(
                 extra_body, kwargs.get("reasoning_effort"),
                 model=model, host=host, is_codex_backend=route.is_codex_backend, is_xai=is_xai,
@@ -1715,13 +1715,13 @@ class _AnthropicCompletionsAdapter:
             max_tokens = kwargs.get("max_tokens") or kwargs.get("max_completion_tokens")
         temperature = kwargs.get("temperature")
         # Reasoning priority: explicit per-call _reasoning_config (MoA per-slot) wins over
-        # extra_body.reasoning; build_anthropic_kwargs translates to ``thinking``.
+        # extra_body.reasoning, then top-level reasoning_effort (a keyed ``providers:`` entry that
+        # declares anthropic_messages on a /v1 URL gets only that); build_anthropic_kwargs
+        # translates to ``thinking``.
         reasoning_cfg = kwargs.get("_reasoning_config")
         if reasoning_cfg is None:
-            _eb = kwargs.get("extra_body")
-            _rc = _eb.get("reasoning") if isinstance(_eb, dict) else None
-            if isinstance(_rc, dict):
-                reasoning_cfg = _rc
+            from agent.auxiliary_adapter_reasoning import _requested_reasoning
+            reasoning_cfg = _requested_reasoning(kwargs.get("extra_body"), kwargs.get("reasoning_effort"))
         # OpenAI tool_choice (str or dict) → Anthropic-style name/mode string.
         tool_choice = kwargs.get("tool_choice")
         if isinstance(tool_choice, dict):

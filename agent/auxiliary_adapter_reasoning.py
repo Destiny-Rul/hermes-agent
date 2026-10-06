@@ -1,24 +1,24 @@
-"""Reasoning effort on the Codex auxiliary adapter's Responses request.
+"""Reasoning effort on the auxiliary adapters' native requests (Codex Responses, Anthropic Messages).
 
 Aux callers speak Chat Completions, which carries effort in two shapes: OpenRouter-style
 ``extra_body.reasoning`` and the standard top-level ``reasoning_effort``. The ``custom`` profile
 projects keyed ``providers:`` entries onto the top-level shape (strict gateways 400 on the nested
-one, #75089), so a ``codex_responses`` custom provider reaches the adapter with only
-``reasoning_effort`` set. Both shapes are the same request; the nested one wins.
+one, #75089), so a ``codex_responses`` or ``anthropic_messages`` custom provider reaches its adapter
+with only ``reasoning_effort`` set. Both shapes are the same request; the nested one wins.
 """
 
 from typing import Any, Dict, Optional
 
 
-def _requested_reasoning(extra_body: Dict[str, Any], top_level_effort: Any) -> Optional[Dict[str, Any]]:
+def _requested_reasoning(extra_body: Any, top_level_effort: Any) -> Optional[Dict[str, Any]]:
     """The caller's reasoning request as an ``extra_body.reasoning``-shaped dict, or None."""
-    reasoning_cfg = extra_body.get("reasoning")
+    reasoning_cfg = extra_body.get("reasoning") if isinstance(extra_body, dict) else None
     if isinstance(reasoning_cfg, dict):
         return reasoning_cfg
     from agent.reasoning_effort import EFFORT_LADDER
 
     effort = str(top_level_effort or "").strip().lower()
-    # Non-ladder values (Groq's "default") are not a Codex level: leave the server default.
+    # Non-ladder values (Groq's "default") are not a reasoning level: leave the server default.
     if effort not in EFFORT_LADDER:
         return None
     return {"enabled": effort != "none", "effort": effort}

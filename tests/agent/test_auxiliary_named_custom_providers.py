@@ -578,6 +578,34 @@ class TestKeyedCustomProviderReasoningWire:
         resp_kwargs, _, _ = adapter._build_responses_kwargs(kwargs)
         assert resp_kwargs.get("reasoning") == {"effort": "low", "summary": "auto"}
 
+    @pytest.mark.parametrize(("effort", "thinking_on"), [("low", True), ("none", False)])
+    def test_anthropic_messages_entry_puts_task_effort_on_the_messages_wire(self, tmp_path, effort, thinking_on):
+        """Same projection for a keyed ``anthropic_messages`` entry on a /v1 URL: nothing in the URL marks it
+        as a Messages endpoint, so only top-level ``reasoning_effort`` reaches the aux Anthropic adapter."""
+        base = "https://proxy.example/v1"
+        _write_config(tmp_path, {
+            "model": {"default": "claude-sonnet-4-5", "provider": "my-proxy"},
+            "providers": {"my-proxy": {"name": "my-proxy", "api": base, "api_key": "k", "api_mode": "anthropic_messages"}},
+            "auxiliary": {"compression": {"provider": "my-proxy", "model": "claude-sonnet-4-5", "reasoning_effort": effort}},
+        })
+        from agent.auxiliary_client import _build_call_kwargs, _get_task_extra_body, resolve_provider_client
+        kwargs = _build_call_kwargs(
+            "my-proxy", "claude-sonnet-4-5", [{"role": "user", "content": "hi"}],
+            extra_body=_get_task_extra_body("compression"), base_url=base, task="compression",
+        )
+        assert kwargs.get("reasoning_effort") == effort and "_reasoning_config" not in kwargs
+        client, _ = resolve_provider_client("my-proxy", "claude-sonnet-4-5")
+        sent = {}
+
+        def fake_create(_client, anthropic_kwargs, **_kw):
+            sent.update(anthropic_kwargs)
+            raise RuntimeError("captured")
+
+        with patch("agent.anthropic_adapter.create_anthropic_message", side_effect=fake_create), \
+                pytest.raises(RuntimeError, match="captured"):
+            client.chat.completions.create(**kwargs)
+        assert bool(sent.get("thinking")) is thinking_on
+
 
 class TestAuxInheritsCustomProviderExtraBody:
     """#103738 hole 3: an aux request routed to a custom provider carries that entry's ``extra_body`` the
