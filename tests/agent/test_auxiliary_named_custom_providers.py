@@ -558,6 +558,26 @@ class TestKeyedCustomProviderReasoningWire:
         )
         assert kwargs["extra_body"] == nested and "reasoning_effort" not in kwargs
 
+    def test_codex_responses_entry_puts_task_effort_on_the_responses_wire(self, tmp_path):
+        """A keyed ``codex_responses`` entry gets the same top-level projection, and the aux Responses
+        adapter must carry it onto the wire — not drop it and leave the server default."""
+        base = "https://proxy.example/v1"
+        _write_config(tmp_path, {
+            "model": {"default": "gpt-5.5", "provider": "my-proxy"},
+            "providers": {"my-proxy": {"name": "my-proxy", "api": base, "api_key": "k", "api_mode": "codex_responses"}},
+            "auxiliary": {"compression": {"provider": "my-proxy", "model": "gpt-5.5", "reasoning_effort": "low"}},
+        })
+        from types import SimpleNamespace
+        from agent.auxiliary_client import _CodexCompletionsAdapter, _build_call_kwargs, _get_task_extra_body
+        kwargs = _build_call_kwargs(
+            "my-proxy", "gpt-5.5", [{"role": "user", "content": "hi"}],
+            extra_body=_get_task_extra_body("compression"), base_url=base, task="compression",
+        )
+        assert kwargs.get("reasoning_effort") == "low"
+        adapter = _CodexCompletionsAdapter(SimpleNamespace(base_url=base), "gpt-5.5")
+        resp_kwargs, _, _ = adapter._build_responses_kwargs(kwargs)
+        assert resp_kwargs.get("reasoning") == {"effort": "low", "summary": "auto"}
+
 
 class TestAuxInheritsCustomProviderExtraBody:
     """#103738 hole 3: an aux request routed to a custom provider carries that entry's ``extra_body`` the
