@@ -909,7 +909,15 @@ class ClientLifecycleMixin:
         except Exception as exc:
             logger.warning("Failed to rebuild Anthropic client after credential refresh: %s", exc)
             return False
+        old_token = self._anthropic_api_key
         self._anthropic_api_key, self._is_anthropic_oauth = new_token, self._anthropic_oauth_flag(new_token)
+        # Auxiliary routes pin the main session's key (``_current_main_runtime`` and the compressor's
+        # ``main_runtime``); left on the rotated-out token they 401 "revoked" while the main loop works.
+        if self.api_key == old_token:
+            self.api_key = new_token
+        compressor = getattr(self, "context_compressor", None)
+        if compressor is not None and getattr(compressor, "api_key", None) == old_token:
+            compressor.api_key = new_token
         return True
 
     # ------------------------------------------------------------------ route-derived client config
